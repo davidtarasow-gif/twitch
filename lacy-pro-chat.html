@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Lacy V3 Chat</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@700;800;900&display=swap" rel="stylesheet">
+
+<style>
+body {
+  margin: 0;
+  background: transparent;
+  overflow: hidden;
+  font-family: 'Inter', sans-serif;
+}
+
+#chat {
+  position: absolute;
+  bottom: 40px;
+  left: 40px;
+  width: 80%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+/* СООБЩЕНИЕ */
+.message {
+  display: flex;
+  align-items: center;
+  margin: 8px 0;
+
+  font-size: 38px;
+  font-weight: 800;
+
+  opacity: 0;
+  transform: translateY(40px);
+  animation: slideIn 0.35s ease forwards;
+}
+
+/* НИК */
+.username {
+  font-weight: 900;
+  margin-right: 12px;
+
+  background: linear-gradient(90deg, #ff0080, #7928ca, #00d4ff, #00ff94);
+  background-size: 300%;
+
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+
+  animation: gradientMove 2.5s linear infinite;
+
+  text-shadow: 0 0 12px rgba(0,0,0,0.95);
+  -webkit-text-stroke: 1px rgba(0,0,0,0.6);
+}
+
+/* ТЕКСТ */
+.text {
+  color: white;
+  text-shadow: 0 0 14px rgba(0,0,0,1);
+  -webkit-text-stroke: 0.6px rgba(0,0,0,0.5);
+}
+
+/* БЕЙДЖИ */
+.badges img {
+  height: 32px;
+  margin-right: 6px;
+}
+
+/* ЭМОДЗИ */
+.emote {
+  height: 36px;
+  vertical-align: middle;
+}
+
+/* ПОДСВЕТКА (саб) */
+.highlight {
+  animation: glow 1s ease;
+}
+
+@keyframes glow {
+  0% { filter: brightness(2.2); transform: scale(1.06); }
+  100% { filter: brightness(1); transform: scale(1); }
+}
+
+/* АНИМАЦИИ */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeOut {
+  to {
+    opacity: 0;
+    transform: translateY(-30px);
+  }
+}
+
+@keyframes gradientMove {
+  0% { background-position: 0%; }
+  100% { background-position: 300%; }
+}
+</style>
+</head>
+
+<body>
+
+<div id="chat"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/tmi.js@1.8.5"></script>
+
+<script>
+// ⚡ ПОДКЛЮЧЕНИЕ
+const client = new tmi.Client({
+  channels: [savedatsaint]
+});
+client.connect();
+
+const chat = document.getElementById("chat");
+
+// 🔥 ПОЛУЧЕНИЕ 7TV EMOTES
+let emoteMap = {};
+
+async function load7TV() {
+  try {
+    const res = await fetch("https://7tv.io/v3/emote-sets/global");
+    const data = await res.json();
+
+    data.emotes.forEach(e => {
+      emoteMap[e.name] = e.data.host.url + "/4x.webp";
+    });
+  } catch {}
+}
+load7TV();
+
+// 💬 ОБРАБОТКА СООБЩЕНИЙ
+client.on("message", (channel, tags, message) => {
+
+  const msg = document.createElement("div");
+  msg.className = "message";
+
+  // 🎯 подсветка сабов
+  if (tags.subscriber || tags.badges?.subscriber) {
+    msg.classList.add("highlight");
+  }
+
+  // бейджи
+  let badgesHTML = "";
+  if (tags.badges) {
+    for (let badge in tags.badges) {
+      badgesHTML += <img src="https://static-cdn.jtvnw.net/badges/v1/${badge}/1">;
+    }
+  }
+
+  msg.innerHTML = `
+    <span class="badges">${badgesHTML}</span>
+    <span class="username">${tags['display-name']}:</span>
+    <span class="text">${parseEmotes(message, tags.emotes)}</span>
+  `;
+
+  chat.appendChild(msg);
+
+  // авто удаление (как у Lacy)
+  setTimeout(() => {
+    msg.style.animation = "fadeOut 0.4s ease forwards";
+    setTimeout(() => msg.remove(), 400);
+  }, 18000);
+
+  if (chat.children.length > 30) {
+    chat.removeChild(chat.children[0]);
+  }
+});
+
+// 🎮 TWITCH + 7TV EMOTES
+function parseEmotes(text, emotes) {
+
+  // Twitch
+  if (emotes) {
+    let splitText = text.split('');
+    for (let id in emotes) {
+      let positions = emotes[id];
+      for (let pos of positions) {
+        let [start, end] = pos.split('-');
+        for (let i = start; i <= end; i++) {
+          splitText[i] = '';
+        }
+        splitText[start] =
+          <img class="emote" src="https://static-cdn.jtvnw.net/emoticons/v2/${id}/default/dark/3.0">;
+      }
+    }
+    text = splitText.join('');
+  }
+
+  // 7TV
+  Object.keys(emoteMap).forEach(name => {
+    const regex = new RegExp(`\\b${name}\\b`, "g");
+    text = text.replace(regex, `<img class="emote" src="${emoteMap[name]}">`);
+  });
